@@ -1,0 +1,44 @@
+name: Build Windows VST3
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Окружение компилятора MSVC, работает с любой установленной версией Visual Studio
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake --version
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release *>&1 | Tee-Object -FilePath configure.log
+          if ($LASTEXITCODE -ne 0) {
+            Select-String -Path configure.log -Pattern "error|not found|could not" |
+              Select-Object -First 30 | ForEach-Object { "::error::$($_.Line)" }
+            exit 1
+          }
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build build --target Kozyavka_VST3 Kozyavka_Standalone *>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) {
+            Select-String -Path build.log -Pattern "error" |
+              Select-Object -First 30 | ForEach-Object { "::error::$($_.Line)" }
+            exit 1
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kozyavka-Windows
+          path: |
+            build/Kozyavka_artefacts/Release/VST3
+            build/Kozyavka_artefacts/Release/Standalone
